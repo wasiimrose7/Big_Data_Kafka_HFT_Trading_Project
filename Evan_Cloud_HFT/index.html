@@ -1,0 +1,224 @@
+//AI DISCLAIMER: AI was used to help establish the base code for this user interface as I have little experience in web design.
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Kafka Latency Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body {
+            font-family: Arial;
+            background: #0f172a;
+            color: white;
+            margin: 0;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: auto;
+            padding: 30px;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        .panel {
+            background: #1e293b;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 12px;
+        }
+
+        input {
+            padding: 10px;
+            border-radius: 6px;
+            border: none;
+            width: 140px;
+        }
+
+        button {
+            padding: 10px 18px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .start {
+            background: #38bdf8;
+        }
+
+        .reset {
+            background: #f87171;
+        }
+
+        .row {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            background: white;
+            border-radius: 12px;
+            padding: 10px;
+        }
+    </style>
+</head>
+
+<body>
+<div class="container">
+
+    <h1>Kafka Latency Dashboard</h1>
+
+    <div class="panel">
+        <div class="row">
+            <input id="rate" type="number" value="500" placeholder="msgs/sec">
+            <input id="duration" type="number" value="10" placeholder="duration">
+            <button class="start" onclick="startTest()">Start</button>
+            <button class="reset" onclick="resetTest()">Reset</button>
+        </div>
+    </div>
+
+    <div class="panel">
+        <canvas id="chart"></canvas>
+    </div>
+
+    <div class="panel">
+        <canvas id="histogram"></canvas>
+    </div>
+
+</div>
+
+<script>
+
+
+const ctx = document.getElementById('chart');
+
+const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: [],
+        datasets: [{
+            label: 'Latency (ms)',
+            data: [],
+            borderColor: '#38bdf8',
+            tension: 0.2
+        }]
+    },
+    options: {
+        plugins: {
+            title: {
+                display: true,
+                text: 'End-to-End Kafka Latency Over Time',
+                color: 'black',
+                font: { size: 18 }
+            }
+        },
+        scales: {
+            x: {
+                title: { display: true, text: 'Message Index' }
+            },
+            y: {
+                title: { display: true, text: 'Latency (ms)' }
+            }
+        }
+    }
+});
+
+
+
+const histCtx = document.getElementById('histogram');
+
+const histogram = new Chart(histCtx, {
+    type: 'bar',
+    data: {
+        labels: [],
+        datasets: [{
+            label: 'Frequency',
+            data: [],
+            backgroundColor: '#60a5fa'
+        }]
+    },
+    options: {
+        plugins: {
+            title: {
+                display: true,
+                text: 'Latency Distribution (Histogram)',
+                color: 'black',
+                font: { size: 18 }
+            }
+        },
+        scales: {
+            x: {
+                title: { display: true, text: 'Latency bins (ms)' }
+            },
+            y: {
+                title: { display: true, text: 'Count' }
+            }
+        }
+    }
+});
+
+
+
+async function startTest() {
+    const rate = document.getElementById("rate").value;
+    const duration = document.getElementById("duration").value;
+
+    await fetch("/start", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({rate, duration})
+    });
+}
+
+
+
+async function resetTest() {
+    await fetch("/reset", { method: "POST" });
+
+    chart.data.labels = [];
+    chart.data.datasets[0].data = [];
+    chart.update();
+
+    histogram.data.labels = [];
+    histogram.data.datasets[0].data = [];
+    histogram.update();
+}
+
+
+
+async function update() {
+    const res = await fetch("/data");
+    const data = await res.json();
+
+    
+    chart.data.labels = data.map((_, i) => i);
+    chart.data.datasets[0].data = data;
+    chart.update();
+
+    
+    const bins = {};
+
+    data.forEach(v => {
+        const bin = Math.floor(v / 10) * 10;
+        bins[bin] = (bins[bin] || 0) + 1;
+    });
+
+    const labels = Object.keys(bins).sort((a,b) => a-b);
+    const values = labels.map(k => bins[k]);
+
+    histogram.data.labels = labels;
+    histogram.data.datasets[0].data = values;
+    histogram.update();
+}
+
+setInterval(update, 500);
+
+</script>
+
+</body>
+</html>
